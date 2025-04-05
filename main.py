@@ -1,6 +1,9 @@
 import json
 import requests
 from LLM import extract_investor_info  # Import the extraction function
+import time
+
+t0 = time.time()
 
 URL = "mts-prism.com"
 PORT = 8082
@@ -15,7 +18,7 @@ def send_get_request(path):
 
 def send_post_request(path, data=None):
     headers = {"X-API-Code": TEAM_API_CODE, "Content-Type": "application/json"}
-    response = requests.post(f"http://{URL}:{PORT}/{path}", 
+    response = requests.post(f"http://{URL}:{PORT}{path}", 
                            data=json.dumps(data), 
                            headers=headers)
     if response.status_code != 200:
@@ -63,6 +66,8 @@ if __name__ == "__main__":
     print(f"\n=== Raw Context ===")
     print(context)
 
+    t1 = time.time()
+
     # Extract structured data using LLM
     investor_data = extract_investor_info(context)
     print("\n=== Extracted Investor Data ===")
@@ -81,3 +86,10 @@ if __name__ == "__main__":
         print(response)
     except Exception as e:
         print(f"Critical error: {str(e)}")
+
+t2 = time.time()
+
+contextTotal = t1-t0
+total = t2-t0
+print(contextTotal)
+print(total)
