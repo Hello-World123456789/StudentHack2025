@@ -2,6 +2,12 @@ import numpy
 import math
 import json
 
+fobj = open("cpi_index_all_00-25.csv","r")
+cpiData = fobj.read()
+print (cpiData)
+cpiData = 
+fobj.close()
+  
 END_VALUE = 10
 BEGINNING_VALUE = 100
 
@@ -10,31 +16,7 @@ statement1 = "Grant Lopez is 47 years old and has a budget of $2716 per year. He
 T0 = 0
 T1 = 1
 
-class portfolioVariables(__init__)
-    def find_budget(statement):    
-        budget_position_beg = statement.find("budget of $") 
-        if budget_position_beg == -1:
-            budget_position_beg = statement.find("budget is $") 
-            if budget_position_beg == -1:
-                budget_position_beg = statement.find("investment of $") 
-                if budget_position_beg == -1:
-                    return None
-        
-        start_index = budget_position_beg + len("budget of $")
-        budget = ""
-        
-        for character in statement[start_index:]:
-            if character.isdigit():
-                budget += character
-            else:
-                return budget
-        return budget
-
-    def find_times(statement):
-        
-        return T0, T1
-
-def inflationRisk(END_VALUE, BEGINNING_VALUE, T0, T1):
+def inflationRisk(END_VALUE, BEGINNING_VALUE, T0, T1, SALARY):
     # The inflation rate at time 0 must be greater than the investment return
     # at time 1 for positive real returns
     
@@ -42,8 +24,15 @@ def inflationRisk(END_VALUE, BEGINNING_VALUE, T0, T1):
     nominalStockReturn = (END_VALUE - BEGINNING_VALUE)/BEGINNING_VALUE
     
     # Consumer Price Index (CPI) data set to measure US stock inflationary risk
-    endCPI = 
-    beginningCPI =
+    if SALARY < 40,000:
+        endCPI = 
+        beginningCPI =
+
+    else if:
+        endCPI =
+        beginningCPI =
+
+    else: 
     
     inflationRate = (endCPI - beginningCPI) / beginningCPI
     
@@ -56,8 +45,3 @@ def inflationRisk(END_VALUE, BEGINNING_VALUE, T0, T1):
         return 1
     else:
         return 0
-
-def systRisk():
-    
-
-# print(systRisk, nonSystRisk = value, liquidityRisk , intRateRisk = value, inflationRisk = 0/1)
