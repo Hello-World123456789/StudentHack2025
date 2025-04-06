@@ -36,6 +36,7 @@ def send_portfolio(weighted_stocks):
     data = [{"ticker": ws[0], "quantity": float(ws[1])} if ws[0] == "CASH" 
             else {"ticker": ws[0], "quantity": int(ws[1])} 
             for ws in weighted_stocks]
+    print(data)
     return send_post_request("/submit", data=data)
 
 # Main Execution
@@ -66,13 +67,17 @@ if __name__ == "__main__":
             # Extract investor information using LLM
             investor_data = extract_investor_info(context)
             print("\n=== Extracted Investor Data ===")
+            temp = (json.dumps(investor_data, indent=2, ensure_ascii=False))
             print(json.dumps(investor_data, indent=2, ensure_ascii=False))
-
+            mydict = dict((k.strip(), v.strip()) for k,v in 
+              (item.split(':') for item in temp.split(',')))
+            print(mydict.keys())
+            print(mydict['"salary"'])
             # Generate portfolio (IMPLEMENT YOUR STRATEGY HERE)
             # Example format: [("AAPL", 100), ("GOOG", 50), ("CASH", 500.50)]
             weighted_stocks = [
                 ("AAPL", 100),      # Replace with your actual stock picks
-                ("CASH", 500.50)    # Replace with your cash allocation
+                ("MSFT", 500.50)    # Replace with your cash allocation
             ]
 
             # Submit portfolio
