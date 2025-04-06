@@ -190,13 +190,13 @@ def choosingStocks(tickerList, T0, T1, avoid_sectors=[]):
         flag = 0
 
         # Liquidity filter
-        if liquidityRisk(ticker) == 1:
+        if liquidityRisk(ticker) == 0:
             continue
         else:
             flag += 1
 
         # Inflation-adjusted return filter
-        if inflationRisk(ticker, T0, T1) == 1:
+        if inflationRisk(ticker, T0, T1) == 0:
             continue
         else:
             flag += 1
@@ -254,26 +254,49 @@ def interpret_risk_score(rts):
     else:
         return "Aggressive (e.g., tech/growth stocks, higher beta)"
 
-def calc_weight(riskAversion, investmentReturns, stockName):
+def calc_weight(riskAversion, investmentReturn, stockName):
     beta = systematicRisk(stockName)
-    if beta != None:
-        weight = investmentReturns/(riskAversion*beta)
-        return weight
-    else:
-        return 0
+    if beta is not None and beta > 0 and riskAversion > 0:
+        # Use absolute value of return and ensure no division by zero
+        return abs(investmentReturn) / (riskAversion * beta)
+    return 0
 
 def calc_amount_of_stock_to_buy(stockList, riskAversion, T0, T1, budget):
     investReturns = []
     weights = []
-
-    for i in range(len(stockList)):
-        startPrice, endPrice = stockPrice(stockList[i], T0, T1)
-        investReturns.append((endPrice-startPrice))
-        weights.append(calc_weight(riskAversion, investReturns[i], stockList[i]))
-
-    final_weights = np.array(weights)/sum(weights)
-    final_amounts = (final_weights*budget)//np.array(investReturns)
-    return final_amounts
+    valid_stocks = []
+    
+    # First pass: calculate returns and filter out negative performers
+    for stock in stockList:
+        startPrice, endPrice = stockPrice(stock, T0, T1)
+        if startPrice is None or endPrice is None:
+            continue
+            
+        return_val = (endPrice - startPrice)
+        if return_val > 0:  # Only consider stocks with positive returns
+            investReturns.append(return_val)
+            valid_stocks.append(stock)
+    
+    if not valid_stocks:
+        return []
+    
+    # Second pass: calculate weights for valid stocks
+    for i in range(len(valid_stocks)):
+        weight = calc_weight(riskAversion, investReturns[i], valid_stocks[i])
+        weights.append(weight)
+    
+    # Normalize weights and calculate amounts
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        return []
+        
+    final_weights = np.array(weights) / total_weight
+    stock_prices = [stockPrice(stock, T0, T1)[1] for stock in valid_stocks]  # Use end price
+    
+    # Calculate number of shares (floor division)
+    final_amounts = np.floor((final_weights * budget) / np.array(stock_prices))
+    
+    return list(zip(valid_stocks, final_amounts.astype(int)))
 
 URL = "mts-prism.com"
 PORT = 8082
@@ -359,7 +382,8 @@ def send_portfolio(weighted_stocks):
     print(data)
     return send_post_request("/submit", data=data)
  
-    
+''' 
+
 def parse_nested_json(json_str):
     # First parse the outer JSON
     outer_dict = json.loads(json_str)
@@ -386,24 +410,40 @@ print(type(result))
 # Print the cleaned dictionary
 print("Parsed Dictionary:")
 print(json.dumps(result, indent=2))
-potential_list = getTickerGroup(result["start"], result["end"])
+'''
+result = {
+  "timestamp": "2025-04-06T05:29:26.155091195Z",
+  "start": "2014-06-06",
+  "end": "2014-06-09",
+  "age": 27,
+  "employed": True,
+  "salary": 28036,
+  "budget": 8483,
+  "dislikes": [
+    "Crypto Assets",
+    "Finance or Crypto Assets"
+  ]
+}
 
+potential_list = getTickerGroup(result["start"], result["end"])
 my_stock = choosingStocks(potential_list, result["start"], result["end"], avoid_sectors=result["dislikes"])
 risk_allowed = calculate_risk_tolerance_score(result["age"], result["salary"], result["budget"])
-stock_buying = calc_amount_of_stock_to_buy(my_stock, risk_allowed, result["start"], result["end"], result["budget"])
+stock_buying = calc_amount_of_stock_to_buy(my_stock, 1, result["start"], result["end"], result["budget"])
+portfolio = calc_amount_of_stock_to_buy(
+    my_stock, 
+    risk_allowed, 
+    result["start"], 
+    result["end"], 
+    result["budget"]
+)
 
-portfolio =[]
-for i in range(len(my_stock)):
-    temp = (my_stock[i], stock_buying[i])
-    portfolio.append(temp)
+if not portfolio:
+    print("No valid stocks found that meet criteria")
+else:
+    success, response = send_portfolio(portfolio)
+    if not success:
+        print(f"Error: {response}")
+    print(f"Evaluation response: ", response)
 
-print(portfolio)
 
 
-# Maybe do something with the context to generate this?
-#portfolio = [("AAPL", 1), ("MSFT", 1), ("NVDA", 1), ("PFE", 1)]
- 
-success, response = send_portfolio(portfolio)
-if not success:
-    print(f"Error: {response}")
-print(f"Evaluation response: ", response)
