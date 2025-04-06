@@ -275,10 +275,135 @@ def calc_amount_of_stock_to_buy(stockList, riskAversion, T0, T1, budget):
     final_amounts = (final_weights*budget)//np.array(investReturns)
     return final_amounts
 
+URL = "mts-prism.com"
+PORT = 8082
+ 
+# Please do NOT share this information anywhere, unless you want your team to be cooked.
+TEAM_API_CODE = "d747eea0e03cea824389395740436f6d"
+# @cyrus or @myguysai on Discord if you need an API key
+ 
+ 
+def send_get_request(path):
+    """
+   Sends a HTTP GET request to the server.
+   Returns:
+       (success?, error or message)
+   """
+    headers = {"X-API-Code": TEAM_API_CODE}
+    response = requests.get(f"http://{URL}:{PORT}/{path}", headers=headers)
+ 
+    # Check whether there was an error sent from the server.
+    # 200 is the HTTP Success status code, so we do not expect any
+    # other response code.
+    if response.status_code != 200:
+        return (
+            False,
+            f"Error - something went wrong when requesting [CODE: {response.status_code}]: {response.text}",
+        )
+    return True, response.text
+ 
+ 
+def send_post_request(path, data=None):
+    """
+   Sends a HTTP POST request to the server.
+   Pass in the POST data to data, to send some message.
+   Returns:
+        (success?, error or message)
+   """
+    headers = {"X-API-Code": TEAM_API_CODE, "Content-Type": "application/json"}
+ 
+    # Convert the data from python dictionary to JSON string,
+    # which is the expected format to be passed
+    data = json.dumps(data)
+    response = requests.post(f"http://{URL}:{PORT}{path}", data=data, headers=headers)
+ 
+    # Check whether there was an error sent from the server.
+    # 200 is the HTTP Success status code, so we do not expect any
+    # other response code.
+    if response.status_code != 200:
+        return (
+            False,
+            f"Error - something went wrong when requesting [CODE: {response.status_code}]: {response.text}",
+        )
+    return True, response.text
+ 
+ 
+def get_context():
+    """
+   Query the challenge server to request for a client to design a portfolio for.
+   Returns:
+       (success?, error or message)
+   """
+    return send_get_request("/request")
+ 
+ 
+def get_my_current_information():
+    """
+   Query your team information.
+   Returns:
+       (success?, error or message)
+   """
+    return send_get_request("/info")
+ 
+ 
+def send_portfolio(weighted_stocks):
+    """
+   Send portfolio stocks to the server for evaluation.
+   Returns:
+       (success?, error or message)
+   """
+    data = [
+        {"ticker": weighted_stock[0], "quantity": weighted_stock[1]}
+        for weighted_stock in weighted_stocks
+    ]
+    print(data)
+    return send_post_request("/submit", data=data)
+ 
+    
+def parse_nested_json(json_str):
+    # First parse the outer JSON
+    outer_dict = json.loads(json_str)
+    
+    # Then parse the inner JSON string that was in the "message" field
+    if 'message' in outer_dict:
+        inner_dict = json.loads(outer_dict['message'])
+        return inner_dict
+    return {}
+ 
+success, information = get_my_current_information()
+if not success:
+    print(f"Error: {information}")
+print(f"Team information: ", information)
+ 
+success, context = get_context()
+if not success:
+    print(f"Error: {context}")
+print(f"Context provided: ", context)
+
+result = parse_nested_json(context)
+print(type(result))
+
+# Print the cleaned dictionary
+print("Parsed Dictionary:")
+print(json.dumps(result, indent=2))
+potential_list = getTickerGroup(result["start"], result["end"])
+
+my_stock = choosingStocks(potential_list, result["start"], result["end"], avoid_sectors=result["dislikes"])
+risk_allowed = calculate_risk_tolerance_score(result["age"], result["salary"], result["budget"])
+stock_buying = calc_amount_of_stock_to_buy(my_stock, risk_allowed, result["start"], result["end"], result["budget"])
+
+portfolio =[]
+for i in range(len(my_stock)):
+    temp = (my_stock[i], stock_buying[i])
+    portfolio.append(temp)
+
+print(portfolio)
 
 
-potential_list = getTickerGroup('2021-12-20', '2022-12-20')
-print(potential_list)
-my_stock = choosingStocks(potential_list, '2021-12-20', '2022-12-20')
-print(my_stock)
-print(calc_amount_of_stock_to_buy(my_stock, 0.8, '2021-12-20', '2022-12-20', 8000))
+# Maybe do something with the context to generate this?
+#portfolio = [("AAPL", 1), ("MSFT", 1), ("NVDA", 1), ("PFE", 1)]
+ 
+success, response = send_portfolio(portfolio)
+if not success:
+    print(f"Error: {response}")
+print(f"Evaluation response: ", response)
