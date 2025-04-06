@@ -105,9 +105,12 @@ def inflationRisk(stockName, T0, T1):
         beginningCPI = cpiData.loc[yearEnd, monthEnd]
         inflationRate = (endCPI - beginningCPI) / beginningCPI
         
-        return 1 if (nominalReturn - inflationRate) > 0 else 0
+        if (nominalReturn - inflationRate) > 0:
+            return 1 
+        else:
+            return 0
     except Exception:
-        return 1
+        return 0
 
 def liquidityRisk(stockName):
     """Check liquidity with error handling"""
@@ -119,9 +122,12 @@ def liquidityRisk(stockName):
         avg_volume = info.get("averageVolume", 0)
         market_cap = info.get("marketCap", 0)
         
-        return 0 if (avg_volume < 100000 and market_cap < 500_000_000) else 1
+        if avg_volume > 100000 or market_cap > 500000 :
+            return 1 
+        else:
+            return 0
     except Exception:
-        return 1
+        return 0
 
 # Core Portfolio Functions
 def getTickerGroup(T0, T1):
@@ -159,41 +165,61 @@ def choosingStocks(tickerList, T0, T1, avoid_sectors=[]):
     
     for ticker in tickerList:
         try:
+            flag = 0
+
+            # Price data check
+            startPrice, endPrice = stockPrice(ticker, T0, T1)
+            if None in (startPrice, endPrice):
+                print(f"{ticker}: Data currently unavailable...")
+                continue
+
             # Get sector and basic info
             info = safe_yfinance_request(ticker)
             if not info:
-                print(f"{ticker}: Failed to get info")
+                print(f"{ticker}: Data currently unavailable...")
                 continue
                 
             sector = info.get("sector")
             if not sector:
-                print(f"{ticker}: No sector data")
+                print(f"{ticker}: No sector data.")
                 continue
                 
             # Sector filter
             if sector in avoid_sectors:
-                print(f"{ticker}: Excluded due to sector ({sector})")
+                print(f"{ticker}: Let's exclude this stock as it is part of the ({sector}) sector.")
+                answer = input("Do you wish to change your mind and INCLUDE this stock? (yes/no): ")
+                if answer == "yes" or "Yes" or "YES":
+                    print(f"Shall we {ticker} continue?")
+                    continue
+                else:
+                    print(f"Excluding {ticker}")
+                    continue 
+            
+            # Systematic risk
+            if systematicRisk(ticker) > 1.2:
+                flag += 1
+                print(f"{ticker}: This stock is quite volatile, but you can diversify it away")
                 continue
-                
+
             # Liquidity filter
             if liquidityRisk(ticker) == 0:
-                print(f"{ticker}: Excluded due to liquidity")
-                continue
-                
-            # Price data check
-            startPrice, endPrice = stockPrice(ticker, T0, T1)
-            if None in (startPrice, endPrice):
-                print(f"{ticker}: Missing price data")
+                flag += 1
+                if flag == 2:
+                    print(f"{ticker}: Do you really want this stock? It is quite risky...")
+                print(f"{ticker}: Be careful, you might not be able to retrieve your cash!")
                 continue
                 
             # Inflation risk check
             if inflationRisk(ticker, T0, T1) == 0:
-                print(f"{ticker}: Failed inflation risk check")
+                flag += 1
+                print(f"{ticker}: Do not invest! You will lose the value of your investment.")
+                if flag > 1: 
+                    "This was a terrible investment anyways..."
                 continue
                 
             # All checks passed
             stockList.append(ticker)
-            print(f"{ticker}: ✅ Accepted")
+            print(f"{ticker}: Accepted")
             
         except Exception as e:
             print(f"{ticker}: Error during processing - {str(e)}")
@@ -316,7 +342,7 @@ if __name__ == "__main__":
                             avoid_sectors=result["dislikes"])
     # Fallback if no stocks pass filters
     if not my_stock:
-        print("\n⚠️ No stocks passed all filters. Using fallback...")
+        print("\n No stocks passed all filters. Using fallback...")
         my_stock = [t for t in potential_list 
                    if stockPrice(t, result["start"], result["end"])[0] is not None][:5]
         print(f"Fallback Stocks: {my_stock}")
@@ -330,13 +356,19 @@ if __name__ == "__main__":
                                           result["budget"])
     
     if not portfolio:
-        print("\n❌ Error: Could not construct portfolio")
+        print("\n Error: Could not construct portfolio")
     else:
-        print("\n🏆 Final Portfolio:")
+        print("\n Final Portfolio:")
         for stock, amount in portfolio:
             print(f"{stock}: {amount} shares")
         
         # Submit portfolio
         success, response = send_portfolio(portfolio)
-        print(f"\nServer Response: {response}")
+        if success:
+            print(f"\n Portfolio submitted successfully!")
+            used_budget = sum(price * qty for ticker, qty in portfolio if (price := yf.Ticker(ticker).info.get("currentPrice", 0)))
+            print(f"\n🧾 Used budget: ${used_budget:,.2f} / ${result['budget']:,.2f}")
+
+        else:
+            print(f"\n Submission failed.")
     
