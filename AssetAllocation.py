@@ -11,10 +11,11 @@ import scipy.optimize as opt
 import requests
 import json
 from typing import Dict, Optional
+import math
 
 LetsPlot.setup_html()
 
-cpiData = pd.read_csv('cpi_index_all_00-25.csv', skiprows = 12, names = ['Year', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Half1', 'Half2'])
+cpiData = pd.read_csv('cpi_index_all_00-25.csv', skiprows = 12, names = ['Year', 1,2,3,4,5,6,7,8,9,10,11,12, 'Half1', 'Half2'])
 cpiData.set_index('Year', inplace = True)
 
 # 2000
@@ -77,14 +78,12 @@ tickersIndexes = [
 
 def stockPrice(stockName, T0, T1):
     # For old stocks
-    data = yf.download(stockName, start=T0, end=T1)
+    data = yf.download(stockName, start=T0, end=T1, auto_adjust=False)
 
     if data.empty:
         return None, None
-    
-    startPrice = round(stockName["Adj Close"].iloc[0], 2)
-    endPrice = round(stockName["Adj Close"].iloc[-1], 2)
-
+    startPrice = round(data.iloc[0,0], 2)
+    endPrice = round(data.iloc[-1,0], 2)
     return startPrice, endPrice
 
 def stockIndustry(stockName):
@@ -103,33 +102,35 @@ def systematicRisk(stockName):
     return beta
 
 def inflationRisk(stockName, T0, T1):
-    # The inflation rate at time 0 must be greater than the investment return
-    # at time 1 for positive real returns
-    startPrice = stockPrice(stockName, T0, T1)
-    endPrice = stockPrice(stockName, T0, T1)
+    try:
+        # The inflation rate at time 0 must be greater than the investment return
+        # at time 1 for positive real returns
+        startPrice, endPrice = stockPrice(stockName, T0, T1)
+ 
+        # Calculate rate of return
+        nominalStockReturn = (endPrice - startPrice)/startPrice
     
-    # Calculate rate of return
-    nominalStockReturn = (endPrice - startPrice)/startPrice
-
-    # Formatting time variables
-    yearStart, monthStart = T0
-    yearEnd, monthEnd = T1
-
-    # Consumer Price Index (CPI) data set to measure US stock inflationary risk
-    endCPI = cpiData.loc[yearStart, monthStart]
-    beginningCPI = cpiData.loc[yearEnd, monthEnd]
-
-    inflationRate = (endCPI - beginningCPI) / beginningCPI
-
-    # Calculate real returns
-    realReturns = nominalStockReturn - inflationRate
+        # Formatting time variables
+        yearStart, monthStart = int(T0.split("-")[0]), int(T0.split("-")[1])
+        yearEnd, monthEnd = int(T1.split("-")[0]), int(T1.split("-")[1])
+    
+        # Consumer Price Index (CPI) data set to measure US stock inflationary risk
+        endCPI = cpiData.loc[yearStart, monthStart]
+        beginningCPI = cpiData.loc[yearEnd, monthEnd]
+    
+        inflationRate = (endCPI - beginningCPI) / beginningCPI
+    
+        # Calculate real returns
+        realReturns = nominalStockReturn - inflationRate
         
-    # Definition returns an index of whether or not the inflation risk is good
-    # Add a function that will compare stocks real returns to one another.
-    if realReturns > 0:
+        # Definition returns an index of whether or not the inflation risk is good
+        # Add a function that will compare stocks real returns to one another.
+        if realReturns > 0:
+            return 1
+        else:
+            return 0
+    except:
         return 1
-    else:
-        return 0
 
 def liquidityRisk(stockName):
     try:
@@ -143,7 +144,7 @@ def liquidityRisk(stockName):
             return 1
         
     except Exception:
-        return 0
+        return 1
 
 def getTickerGroup(T0, T1):
     year = int(T1.split("-")[0])  # Extract year from date string
@@ -253,5 +254,31 @@ def interpret_risk_score(rts):
     else:
         return "Aggressive (e.g., tech/growth stocks, higher beta)"
 
+def calc_weight(riskAversion, investmentReturns, stockName):
+    beta = systematicRisk(stockName)
+    if beta != None:
+        weight = investmentReturns/(riskAversion*beta)
+        return weight
+    else:
+        return 0
+
+def calc_amount_of_stock_to_buy(stockList, riskAversion, T0, T1, budget):
+    investReturns = []
+    weights = []
+
+    for i in range(len(stockList)):
+        startPrice, endPrice = stockPrice(stockList[i], T0, T1)
+        investReturns.append((endPrice-startPrice))
+        weights.append(calc_weight(riskAversion, investReturns[i], stockList[i]))
+
+    final_weights = np.array(weights)/sum(weights)
+    final_amounts = (final_weights*budget)//np.array(investReturns)
+    return final_amounts
 
 
+
+potential_list = getTickerGroup('2021-12-20', '2022-12-20')
+print(potential_list)
+my_stock = choosingStocks(potential_list, '2021-12-20', '2022-12-20')
+print(my_stock)
+print(calc_amount_of_stock_to_buy(my_stock, 0.8, '2021-12-20', '2022-12-20', 8000))
