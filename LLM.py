@@ -1,36 +1,38 @@
 import requests
 import json
+import re
 from typing import Dict, Optional
 
-def extract_investor_info(text: str) -> Dict[str, Optional[str]]:
-    """
-    Uses Ollama's Mistral to extract structured data from unstructured text.
-    Returns a dictionary with: age, budget, start_date, end_date, avoid, salary.
-    """
-    # Define required fields with default None values
+def extract_investor_info(text: str) -> Dict[str, Optional[float]]:
     required_fields = ["age", "budget", "start_date", "end_date", "avoid", "salary"]
-    
-    # Enhanced prompt with clearer instructions
+    default_values = {
+        "age": 30,
+        "budget": 100000.00,
+        "start_date": "2024-01-01",
+        "end_date": "2025-01-01",
+        "avoid": "",
+        "salary": 50000.00
+    }
+
     prompt = f"""Analyze this text and extract the following details as a valid JSON object:
 {{
     "age": <integer>,
-    "budget": <integer without $ or commas>,
+    "budget": <decimal number with optional cents>,
     "start_date": <YYYY-MM-DD>,
     "end_date": <YYYY-MM-DD>,
     "avoid": <text description>,
-    "salary": <integer if present>
+    "salary": <decimal number if present>
 }}
 
 Text to analyze: "{text}"
 
-Return ONLY the JSON object between ```json markers, nothing else."""
+Return ONLY the JSON object with double quotes, nothing else."""
 
     try:
-        # Verify Ollama is running first
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        response.raise_for_status()
+        # Verify Ollama is running
+        requests.get("http://localhost:11434/api/tags", timeout=5).raise_for_status()
 
-        # Send the request to Ollama
+        # Get LLM response
         response = requests.post(
             "http://localhost:11434/api/generate",
             json={
@@ -38,29 +40,33 @@ Return ONLY the JSON object between ```json markers, nothing else."""
                 "prompt": prompt,
                 "stream": False,
                 "format": "json",
-                "options": {"temperature": 0.3}  # Less creative, more factual
+                "options": {"temperature": 0.3}
             },
             timeout=30
-        )
-        response.raise_for_status()
+        ).json()
 
-        # Extract and clean the JSON response
-        llm_output = response.json()
-        raw_response = llm_output["response"].strip()
-        
-        # Handle different response formats
-        if "```json" in raw_response:
-            json_str = raw_response.split("```json")[1].split("```")[0]
-        else:
-            json_str = raw_response[raw_response.find("{"):raw_response.rfind("}")+1]
+        # Improved JSON extraction using regex
+        raw_response = response["response"].strip()
+        json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if not json_match:
+            return default_values
+            
+        data = json.loads(json_match.group())
 
-        # Parse and validate the JSON
-        result = json.loads(json_str)
-        
-        # Ensure all required fields are present
-        return {field: result.get(field) for field in required_fields}
+        # Safely convert numeric fields with fallbacks
+        conversions = {
+            'age': lambda x: int(x) if x else default_values['age'],
+            'budget': lambda x: round(float(str(x).replace(',', '')), 2) if x else default_values['budget'],
+            'salary': lambda x: round(float(str(x).replace(',', '')), 2) if x else default_values['salary']
+        }
+
+        return {
+            field: conversions[field](data.get(field, default_values[field])) 
+            if field in conversions 
+            else data.get(field, default_values[field])
+            for field in required_fields
+        }
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {field: None for field in required_fields}
-
+        print(f"Extraction error: {str(e)}")
+        return default_values
